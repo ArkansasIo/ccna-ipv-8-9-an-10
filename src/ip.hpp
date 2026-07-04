@@ -15,8 +15,9 @@ std::optional<std::uint32_t> parse_ipv4(const std::string& dotted);
 // Convert uint32 IPv4 back to dotted-decimal string.
 std::string format_ipv4(std::uint32_t ip);
 
-// CIDR mask from prefix length.
+// CIDR mask from prefix length (IPv4-only => prefix_len in [0,32]).
 std::uint32_t mask_from_prefix(int prefix_len);
+
 
 struct Cidr {
   std::uint32_t network{};

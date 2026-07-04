@@ -44,13 +44,16 @@ std::string format_ipv4(std::uint32_t ip) {
 }
 
 std::uint32_t mask_from_prefix(int prefix_len) {
+  // Repo currently implements IPv4 math only (32-bit addresses).
+  // If caller provides p > 32 (e.g. 64/96/128/256), we intentionally reject.
   if (prefix_len < 0 || prefix_len > 32) {
-    throw std::invalid_argument("prefix_len must be in [0,32]");
+    throw std::invalid_argument("prefix_len must be in [0,32] for IPv4 CIDR math");
   }
   if (prefix_len == 0) return 0u;
   // Example prefix=24 => mask = 11111111 11111111 11111111 00000000
   return 0xFFFFFFFFu << (32 - prefix_len);
 }
+
 
 Cidr make_cidr(std::uint32_t ip, int prefix_len) {
   std::uint32_t mask = mask_from_prefix(prefix_len);
