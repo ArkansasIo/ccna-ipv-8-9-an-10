@@ -1,6 +1,6 @@
 #include "ipv6.hpp"
 
-#include <algorithm>
+#include <array>
 #include <cctype>
 #include <iomanip>
 #include <sstream>
@@ -30,8 +30,7 @@ bool parse_ipv4_tail(std::string_view text, std::array<std::uint8_t, 4>& out) {
   std::size_t start = 0;
   for (int i = 0; i < 4; ++i) {
     const std::size_t end = text.find('.', start);
-    const bool last = end == std::string_view::npos;
-    const std::size_t stop = last ? text.size() : end;
+    const std::size_t stop = end == std::string_view::npos ? text.size() : end;
     if (stop == start) return false;
     unsigned int value = 0;
     for (std::size_t p = start; p < stop; ++p) {
@@ -41,23 +40,22 @@ bool parse_ipv4_tail(std::string_view text, std::array<std::uint8_t, 4>& out) {
       if (value > 255U) return false;
     }
     out[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(value);
-    if (last) return i == 3;
+    if (end == std::string_view::npos) return i == 3;
     start = end + 1;
   }
   return false;
 }
 
-bool parse_side(const std::string& side, std::vector<std::uint16_t>& words) {
+bool parse_side(std::string_view side, std::vector<std::uint16_t>& words) {
   if (side.empty()) return true;
   std::size_t start = 0;
   while (start < side.size()) {
     const std::size_t end = side.find(':', start);
-    const std::size_t stop = end == std::string::npos ? side.size() : end;
-    const std::string_view token(side.data() + start, stop - start);
+    const std::size_t stop = end == std::string_view::npos ? side.size() : end;
     std::uint16_t word = 0;
-    if (!parse_hex_word(token, word)) return false;
+    if (!parse_hex_word(side.substr(start, stop - start), word)) return false;
     words.push_back(word);
-    if (end == std::string::npos) break;
+    if (end == std::string_view::npos) break;
     start = end + 1;
     if (start == side.size()) return false;
   }
@@ -70,14 +68,17 @@ std::optional<IPv6Address> parse_ipv6(const std::string& text) {
   if (text.empty() || text.find('%') != std::string::npos) return std::nullopt;
 
   std::string input = text;
-  std::array<std::uint8_t, 4> ipv4{};
   const std::size_t dot = input.find('.');
   if (dot != std::string::npos) {
     const std::size_t colon = input.rfind(':');
-    if (colon == std::string::npos || !parse_ipv4_tail(std::string_view(input).substr(colon + 1), ipv4)) {
-      return std::nullopt;
-    }
-    input.replace(colon + 1, input.size() - colon - 1, "v4v4");
+    if (colon == std::string::npos) return std::nullopt;
+    std::array<std::uint8_t, 4> v4{};
+    if (!parse_ipv4_tail(std::string_view(input).substr(colon + 1), v4)) return std::nullopt;
+    std::ostringstream replacement;
+    replacement << std::hex << std::nouppercase
+                << static_cast<unsigned int>((v4[0] << 8U) | v4[1]) << ':'
+                << static_cast<unsigned int>((v4[2] << 8U) | v4[3]);
+    input.replace(colon + 1, input.size() - colon - 1, replacement.str());
   }
 
   const std::size_t compression = input.find("::");
@@ -88,27 +89,10 @@ std::optional<IPv6Address> parse_ipv6(const std::string& text) {
   std::vector<std::uint16_t> left;
   std::vector<std::uint16_t> right;
   if (compression == std::string::npos) {
-    if (input.find("v4v4") != std::string::npos) {
-      const std::size_t pos = input.find("v4v4");
-      if (pos != input.size() - 4) return std::nullopt;
-      const std::string prefix = input.substr(0, pos);
-      if (!prefix.empty() && prefix.back() != ':') return std::nullopt;
-      const std::string clean = prefix.empty() ? std::string{} : prefix.substr(0, prefix.size() - 1);
-      if (!parse_side(clean, left)) return std::nullopt;
-      left.push_back(static_cast<std::uint16_t>((ipv4[0] << 8U) | ipv4[1]));
-      left.push_back(static_cast<std::uint16_t>((ipv4[2] << 8U) | ipv4[3]));
-    } else if (!parse_side(input, left)) {
-      return std::nullopt;
-    }
-    if (left.size() != 8) return std::nullopt;
+    if (!parse_side(input, left) || left.size() != 8) return std::nullopt;
   } else {
-    const std::string left_text = input.substr(0, compression);
-    const std::string right_text = input.substr(compression + 2);
-    if (!parse_side(left_text, left)) return std::nullopt;
-    if (right_text == "v4v4") {
-      right.push_back(static_cast<std::uint16_t>((ipv4[0] << 8U) | ipv4[1]));
-      right.push_back(static_cast<std::uint16_t>((ipv4[2] << 8U) | ipv4[3]));
-    } else if (!parse_side(right_text, right)) {
+    if (!parse_side(std::string_view(input).substr(0, compression), left) ||
+        !parse_side(std::string_view(input).substr(compression + 2), right)) {
       return std::nullopt;
     }
     if (left.size() + right.size() >= 8) return std::nullopt;
@@ -116,13 +100,12 @@ std::optional<IPv6Address> parse_ipv6(const std::string& text) {
 
   std::vector<std::uint16_t> words;
   words.reserve(8);
-  if (compression == std::string::npos) {
-    words = left;
-  } else {
-    words.insert(words.end(), left.begin(), left.end());
+  words.insert(words.end(), left.begin(), left.end());
+  if (compression != std::string::npos) {
     words.insert(words.end(), 8 - left.size() - right.size(), 0);
     words.insert(words.end(), right.begin(), right.end());
   }
+  if (words.size() != 8) return std::nullopt;
 
   IPv6Address result;
   for (std::size_t i = 0; i < 8; ++i) {
@@ -155,7 +138,7 @@ std::string format_ipv6(const IPv6Address& address) {
   out << std::hex << std::nouppercase;
   for (std::size_t i = 0; i < 8;) {
     if (i == best_start) {
-      out << (i == 0 ? "::" : ":");
+      out << "::";
       i += best_len;
       continue;
     }
