@@ -97,7 +97,7 @@ int main() {
   expect(parse_ipv6("::ffff:192.0.2.1").has_value(), "IPv4-mapped IPv6 parses");
   expect(!parse_ipv6("2001:::1").has_value(), "invalid IPv6 compression rejected");
   expect(format_ipv6(make_ipv6_cidr(v6, 64).network) == "2001:db8::", "IPv6 /64 network");
-  expect(format_ipv6(make_ipv6_cidr(v6, 64).last) == "2001:db8:0:0:ffff:ffff:ffff:ffff", "IPv6 /64 last address");
+  expect(format_ipv6(make_ipv6_cidr(v6, 64).last) == "2001:db8::ffff:ffff:ffff:ffff", "IPv6 /64 last address");
 
   rejected = false;
   try { (void)mask_from_ipv6_prefix(129); } catch (const std::invalid_argument&) { rejected = true; }
