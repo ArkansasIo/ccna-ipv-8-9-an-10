@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ccna_networking_labs VERSION 1.1.0 LANGUAGES CXX)
+project(ccna_networking_labs VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,6 +9,8 @@ add_library(ccna_networking
   src/ip.cpp
   src/routing.cpp
   src/vlsm.cpp
+  src/ipv6.cpp
+  src/ipv6_routing.cpp
 )
 target_include_directories(ccna_networking PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(MSVC)
@@ -22,6 +24,9 @@ target_link_libraries(cidr-calculator PRIVATE ccna_networking)
 
 add_executable(routing-lpm labs/02-routing-lpm/main.cpp)
 target_link_libraries(routing-lpm PRIVATE ccna_networking)
+
+add_executable(ipv6-cidr labs/03-ipv6-cidr/main.cpp)
+target_link_libraries(ipv6-cidr PRIVATE ccna_networking)
 
 add_executable(vlsm-allocator projects/02-vlsm-allocator/main.cpp)
 target_link_libraries(vlsm-allocator PRIVATE ccna_networking)
