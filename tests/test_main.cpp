@@ -1,4 +1,6 @@
 #include "ip.hpp"
+#include "ipv6.hpp"
+#include "ipv6_routing.hpp"
 #include "routing.hpp"
 #include "vlsm.hpp"
 
@@ -87,6 +89,35 @@ int main() {
     rejected = true;
   }
   expect(rejected, "VLSM detects parent exhaustion");
+
+  const auto v6 = *parse_ipv6("2001:0DB8:0000:0000:0000:0000:0000:0042");
+  expect(format_ipv6(v6) == "2001:db8::42", "IPv6 RFC 5952 formatting");
+  expect(parse_ipv6("2001:db8::42") == v6, "compressed IPv6 parses");
+  expect(parse_ipv6("::1").has_value(), "IPv6 loopback parses");
+  expect(parse_ipv6("::ffff:192.0.2.1").has_value(), "IPv4-mapped IPv6 parses");
+  expect(!parse_ipv6("2001:::1").has_value(), "invalid IPv6 compression rejected");
+  expect(format_ipv6(make_ipv6_cidr(v6, 64).network) == "2001:db8::", "IPv6 /64 network");
+  expect(format_ipv6(make_ipv6_cidr(v6, 64).last) == "2001:db8:0:0:ffff:ffff:ffff:ffff", "IPv6 /64 last address");
+
+  rejected = false;
+  try { (void)mask_from_ipv6_prefix(129); } catch (const std::invalid_argument&) { rejected = true; }
+  expect(rejected, "IPv6 prefix above 128 rejected");
+
+  const auto v6_32 = make_ipv6_cidr(*parse_ipv6("2001:db8::1"), 32);
+  const auto v6_48 = make_ipv6_cidr(*parse_ipv6("2001:db8:1234::1"), 48);
+  const auto v6_64 = make_ipv6_cidr(*parse_ipv6("2001:db8:1234:5678::1"), 64);
+  std::vector<IPv6Route> v6_routes{
+      {make_ipv6_cidr(*parse_ipv6("::"), 0), "DEFAULT", 100},
+      {v6_32, "CORE", 20},
+      {v6_48, "DIST", 10},
+      {v6_64, "ACCESS", 5}
+  };
+  idx = ipv6_lpm_lookup(v6_routes, *parse_ipv6("2001:db8:1234:5678::42"));
+  expect(idx >= 0 && v6_routes[static_cast<std::size_t>(idx)].next_hop == "ACCESS", "IPv6 longest prefix selected");
+  idx = ipv6_lpm_lookup(v6_routes, *parse_ipv6("2001:db8:9999::42"));
+  expect(idx >= 0 && v6_routes[static_cast<std::size_t>(idx)].next_hop == "CORE", "IPv6 /32 selected");
+  idx = ipv6_lpm_lookup(v6_routes, *parse_ipv6("2001:4860:4860::8888"));
+  expect(idx >= 0 && v6_routes[static_cast<std::size_t>(idx)].next_hop == "DEFAULT", "IPv6 default selected");
 
   std::cout << "All CCNA tests passed.\n";
 }
