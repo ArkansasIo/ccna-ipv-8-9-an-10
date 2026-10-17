@@ -1,0 +1,29 @@
+name: C++ CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build all labs
+        run: cmake --build build --config Release --parallel
+      - name: Run tests
+        run: ctest --test-dir build -C Release --output-on-failure
